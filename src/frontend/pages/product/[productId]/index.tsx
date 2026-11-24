@@ -5,10 +5,9 @@ import { NextPage } from 'next';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Ad from '../../../components/Ad';
-import Footer from '../../../components/Footer';
 import Layout from '../../../components/Layout';
 import ProductPrice from '../../../components/ProductPrice';
 import Recommendations from '../../../components/Recommendations';
@@ -33,9 +32,11 @@ const ProductDetail: NextPage = () => {
   const { selectedCurrency } = useCurrency();
   const productId = query.productId as string;
 
-  useEffect(() => {
+  const [quantityProductId, setQuantityProductId] = useState(productId);
+  if (quantityProductId !== productId) {
+    setQuantityProductId(productId);
     setQuantity(1);
-  }, [productId]);
+  }
 
   const {
     data: {
@@ -45,12 +46,15 @@ const ProductDetail: NextPage = () => {
       priceUsd = { units: 0, currencyCode: 'USD', nanos: 0 },
       categories,
     } = {} as Product,
+    isPending,
   } = useQuery({
       queryKey: ['product', productId, 'selectedCurrency', selectedCurrency],
       queryFn: () => ApiGateway.getProduct(productId, selectedCurrency),
       enabled: !!productId,
     }
-  ) as { data: Product };
+  ) as { data: Product; isPending: boolean };
+
+  const showImage = !!picture || isPending;
 
   const onAddItem = useCallback(async () => {
     await addItem({
@@ -71,34 +75,40 @@ const ProductDetail: NextPage = () => {
       <Layout>
         <S.ProductDetail data-cy={CypressFields.ProductDetail}>
           <S.Container>
-            <S.Image $src={"/images/products/" + picture} data-cy={CypressFields.ProductPicture} />
-            <S.Details>
-              <S.Name data-cy={CypressFields.ProductName}>{name}</S.Name>
-              <S.Description data-cy={CypressFields.ProductDescription}>{description}</S.Description>
-              <S.ProductPrice>
-                <ProductPrice price={priceUsd} />
-              </S.ProductPrice>
-              <S.Text>Quantity</S.Text>
-              <Select
-                data-cy={CypressFields.ProductQuantity}
-                onChange={event => setQuantity(+event.target.value)}
-                value={quantity}
-              >
-                {quantityOptions.map(option => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </Select>
-              <S.AddToCart data-cy={CypressFields.ProductAddToCart} onClick={onAddItem}>
-                <Image src="/icons/Cart.svg" height="15" width="15" alt="cart" /> Add To Cart
-              </S.AddToCart>
-            </S.Details>
+            {showImage ? (
+              <S.Image
+                $src={picture ? `/images/products/${picture}` : ''}
+                data-cy={CypressFields.ProductPicture}
+              />
+            ) : null}
+            {isPending ? <S.DetailsPlaceholder /> : (
+              <S.Details $fullWidth={!showImage}>
+                <S.Name data-cy={CypressFields.ProductName}>{name}</S.Name>
+                <S.Description data-cy={CypressFields.ProductDescription}>{description}</S.Description>
+                <S.ProductPrice>
+                  <ProductPrice price={priceUsd} />
+                </S.ProductPrice>
+                <S.Text>Quantity</S.Text>
+                <Select
+                  data-cy={CypressFields.ProductQuantity}
+                  onChange={event => setQuantity(+event.target.value)}
+                  value={quantity}
+                >
+                  {quantityOptions.map(option => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Select>
+                <S.AddToCart data-cy={CypressFields.ProductAddToCart} onClick={onAddItem}>
+                  <Image src="/icons/Cart.svg" height="15" width="15" alt="cart" /> Add To Cart
+                </S.AddToCart>
+              </S.Details>
+            )}
           </S.Container>
           <Recommendations />
         </S.ProductDetail>
         <Ad />
-        <Footer />
       </Layout>
     </AdProvider>
   );

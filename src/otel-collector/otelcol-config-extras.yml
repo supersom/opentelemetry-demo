@@ -3,8 +3,11 @@
 
 # extra settings to be merged into OpenTelemetry Collector configuration
 # do not delete this file
+#
+# The collector merges config files but REPLACES arrays, so each pipeline below
+# repeats the receivers and processors of otelcol-config.yml.
 receivers:
-  # Prometheus receiver to scrape metrics from Prometheus-compatible endpoints
+  # Prometheus receiver to scrape the collector's own metrics
   prometheus:
     config:
       scrape_configs:
@@ -13,8 +16,11 @@ receivers:
           static_configs:
             - targets: ['localhost:8888']
 
+processors:
+  batch:
+
 connectors:
-  spanmetrics:
+  span_metrics:
     aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
     dimensions:
       - name: http.method
@@ -48,51 +54,47 @@ exporters:
     traces_endpoint: https://${env:OODLE_INSTANCE}.collector.oodle.ai/v1/otlp/traces
     metrics_endpoint: https://${env:OODLE_INSTANCE}.collector.oodle.ai/v1/otlp/metrics/${env:OODLE_INSTANCE}
     logs_endpoint: https://${env:OODLE_INSTANCE}-logs.collector.oodle.ai/ingest/otel/v1/logs
-  
+
   prometheusremotewrite/oodle:
     endpoint: https://${env:OODLE_INSTANCE}.collector.oodle.ai/v1/prometheus/${env:OODLE_INSTANCE}/write
     headers:
       X-API-KEY: ${env:OODLE_API_KEY}
-  
+
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [resourcedetection, memory_limiter, transform, batch]
-      exporters: [otlphttp/oodle, spanmetrics]
+      processors: [resource_detection, memory_limiter, transform/sanitize_spans, gen_ai_normalizer, transform/redact_sensitive_data, redaction, batch]
+      exporters: [otlphttp/oodle, span_metrics]
     metrics:
-      receivers: [httpcheck/frontend-proxy, hostmetrics, nginx, otlp, postgresql, redis, spanmetrics]
-      processors: [resourcedetection, memory_limiter, batch]
+      receivers: [docker_stats, http_check/frontend-proxy, host_metrics, nginx, otlp, redis, postgresql, prometheus/ad, span_metrics]
+      processors: [resource_detection, memory_limiter, batch]
       exporters: [otlphttp/oodle]
     metrics/prom:
       receivers: [prometheus]
       processors: [memory_limiter, batch]
       exporters: [prometheusremotewrite/oodle]
     logs:
-      receivers: [otlp]
-      processors: [resourcedetection, memory_limiter, batch]
+      receivers: [otlp, postgresql]
+      processors: [resource_detection, memory_limiter, transform/sanitize_logs, batch]
       exporters: [otlphttp/oodle]
-  # Telemetry configuration to expose Prometheus metrics
+    profiles:
+      receivers: [otlp]
+      processors: [resource_detection, filter/sanitize_profiles, memory_limiter]
+      exporters: [debug]
+  # Expose the collector's own metrics on :8888 for the prometheus receiver above,
+  # and keep the periodic OTLP reader from otelcol-config.yml (readers is an array).
   telemetry:
     metrics:
       level: detailed
       readers:
+        - periodic:
+            exporter:
+              otlp:
+                protocol: http/protobuf
+                endpoint: http://${env:OTEL_COLLECTOR_HOST}:${env:OTEL_COLLECTOR_PORT_HTTP}
         - pull:
             exporter:
               prometheus:
                 host: '0.0.0.0'
                 port: 8888
-
-
-## Example configuration for sending data to your own OTLP HTTP backend
-## Note: the spanmetrics exporter must be included in the exporters array
-## if overriding the traces pipeline.
-##
-#  exporters:
-#    otlphttp/example:
-#      endpoint: <your-endpoint-url>
-#
-#  service:
-#    pipelines:
-#      traces:
-#        exporters: [spanmetrics, otlphttp/example]

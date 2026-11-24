@@ -39,3 +39,36 @@ From the root of `opentelemetry-demo`, run:
 ```sh
 docker build --file ./src/ad/Dockerfile ./
 ```
+
+The container configures the Java agent to capture `demo.ad.request_type` and
+`demo.ad.response_type` from the ad response log's Log4j context. When running
+outside the container with the Java agent, configure
+`OTEL_INSTRUMENTATION_LOG4J_APPENDER_EXPERIMENTAL_MDC_ATTRIBUTES_INCLUDED`
+with those keys to export the same attributes.
+
+## Custom metrics: bridging Prometheus to OpenTelemetry
+
+The Ad service intentionally emits custom metrics in **two different ways**:
+
+1. **OpenTelemetry SDK** (recommended): `adRequestsCounter`
+   (`demo.ad.requests`) is created via `GlobalOpenTelemetry.getMeter(...)`
+   and exported to the OTel Collector over OTLP.
+2. **Prometheus client library**: `adsServedCounter`
+   (`demo_ad_served_total{category}`) is created with the
+   `io.prometheus:prometheus-metrics-core` library and exposed on a separate
+   HTTP endpoint (`AD_PROMETHEUS_PORT`, default `9465`). The OTel Collector's
+   `prometheus/ad` receiver scrapes this endpoint and forwards the metric
+   into the same metrics pipeline.
+
+The Prometheus-client path is included to demonstrate a **common pattern
+during OpenTelemetry adoption**: organizations frequently already own a
+significant amount of Prometheus instrumentation (in libraries, third-party
+exporters, or legacy services) and want to ingest those metrics into an
+OpenTelemetry-native pipeline without rewriting everything up front. The
+Collector's `prometheus` receiver is the bridge that makes this possible.
+
+**Recommendation**: this is a *transitional* pattern. Prefer the
+OpenTelemetry SDK for new custom metrics, and migrate existing
+Prometheus-client metrics to it - incremental migration as you touch
+the surrounding code has proven successful in practice, but a focused
+refactor works too; what matters is that the migration happens.
