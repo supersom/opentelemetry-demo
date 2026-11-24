@@ -42,6 +42,14 @@ endif
 # Untracked local secrets (OODLE_INSTANCE, OODLE_API_KEY); loaded last so it wins, skipped if absent
 DOCKER_COMPOSE_ENV+= $(if $(wildcard .env.oodle),--env-file .env.oodle)
 
+# Pin images to IMAGE_VERSION only when this checkout is exactly a release tag; otherwise
+# .env's DEMO_VERSION (latest) applies. Exported so it beats the --env-file values;
+# a DEMO_VERSION already set in the shell still wins.
+IMAGE_VERSION := $(shell sed -n 's/^IMAGE_VERSION=//p' .env)
+ifneq ($(shell git describe --exact-match --tags 2>/dev/null),)
+export DEMO_VERSION ?= $(IMAGE_VERSION)
+endif
+
 # see https://github.com/open-telemetry/build-tools/releases for semconvgen updates
 # Keep links in semantic_conventions/README.md and .vscode/settings.json in sync!
 SEMCONVGEN_VERSION=0.11.0
