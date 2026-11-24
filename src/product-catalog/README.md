@@ -23,6 +23,31 @@ From the root directory, run:
 docker compose build product-catalog
 ```
 
+`GetProduct` returns `NotFound` for a missing product and `Internal` for a
+database failure. Canceled requests and expired deadlines retain their gRPC
+status.
+
+Database Calls Instrumentation
+
+PostgreSQL queries are instrumented with
+[otelsql](https://pkg.go.dev/github.com/XSAM/otelsql), with SQLCommenter enabled
+to append trace context to SQL statements (for example, `traceparent` key-value
+pairs in query comments).
+
+The option is configured in `main.go` when opening the database connection:
+
+```go
+db, err = otelsql.Open("postgres", connStr,
+    dbAttrs,
+    otelsql.WithSQLCommenter(true),
+    otelsql.WithSpanOptions(...),
+)
+```
+
+Queries must use context-aware methods such as `QueryContext` and
+`QueryRowContext` so the active trace context is available when SQL comments
+are injected.
+
 ## Regenerate protos
 
 To build the protos, run from the root directory:
@@ -30,6 +55,18 @@ To build the protos, run from the root directory:
 ```sh
 make docker-generate-protobuf
 ```
+
+## Generate feature flag types
+
+To regenerate the typed feature flag accessors from `flags.json`, run from the
+service directory:
+
+```sh
+go generate ./...
+```
+
+This uses the [OpenFeature CLI](https://github.com/open-feature/cli) to
+produce `flags/flags_gen.go`.
 
 ## Bump dependencies
 

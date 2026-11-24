@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-FROM python:3.12-slim-bookworm AS base
+FROM docker.io/library/python:3.15.1-slim-bookworm@sha256:575f8bc12ec26542e0678bc6b60e385218248019d433157ec327264a78c3a853 AS base
 
 FROM base AS builder
 RUN apt-get -qq update \
@@ -10,7 +10,7 @@ RUN apt-get -qq update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY ./src/load-generator/requirements.txt .
-RUN pip install --prefix="/reqs" -r requirements.txt
+RUN pip install --prefix="/reqs" --require-hashes -r requirements.txt
 
 FROM base
 WORKDIR /usr/src/app/
